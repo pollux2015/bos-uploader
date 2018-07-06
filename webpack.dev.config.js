@@ -1,17 +1,18 @@
 const path = require('path');
+const webpack = require('webpack');
+const OpenBrowserPlugin = require('open-browser-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const UglifyJsPlugin = require('uglifyjs-webpack-plugin')
 
 module.exports = {
-  mode: 'production',
+  mode: 'development',
   entry: {
-    main: './src/ubos.upload.js'
+    bceBundle: './src/main.js'
   },
   output: {
-    filename: '[name].min.js',
-    path: path.resolve(__dirname, 'dist'),
+    filename: 'ubos.upload.min.js',
+    path: path.resolve(__dirname, 'dev'),
     libraryTarget: 'umd',
-    library: "ubos"
+    library: 'ubos'
   },
   devtool: 'inline-source-map',
   module: {
@@ -28,12 +29,21 @@ module.exports = {
   },
   plugins: [
     new UglifyJsPlugin(),
+    new webpack.HotModuleReplacementPlugin(),
     new HtmlWebpackPlugin({
       filename: 'index.html',
       template: 'index.html',
       inject: true
     }),
+    new OpenBrowserPlugin({
+      url: 'http://localhost:9000'
+    })
   ],
+  devServer: {
+    // contentBase: path.join(__dirname, 'dist'),
+    hot: true,
+    port: 9000
+  },
   node: {
     // prevent webpack from injecting useless setImmediate polyfill because Vue
     // source contains it (although only uses it if it's native).

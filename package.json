@@ -2,7 +2,7 @@
   "name": "bos-uploader",
   "version": "1.0.0",
   "scripts": {
-    "dev": "webpack-dev-server",
+    "dev": "webpack-dev-server webpack.dev.config.js",
     "build": "webpack"
   },
   "license": "MIT",

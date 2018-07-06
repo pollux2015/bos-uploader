@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Webpack-demos</title>
+  <script type="text/javascript" src="//assets.uooconline.com/index/js/vendors/swiper-3.4.2.jquery.min.js?v1530698640992=d7749c8a97"></script>
+  <script src="./src/bec.sdk.js"></script>
+</head>
+
+<body>
+  <button id="uploaderBtn">上传文件</button>
+  <button id="cancelBtn">取消上传</button>
+</body>
+
+<script>
+  var ubsupload = new ubos.upload({
+    prefix: 'documents/',
+    uploadMax: 2,
+    multiple: true,
+    platform: 2,
+    mimeLimit: '',
+    onerror: (res) => {
+      console.log(res)
+    },
+    onabort: (res) => {
+      // console.log(res)
+    },
+    onprogerss: (res) => {
+      console.log(res)
+    },
+    ondone: (res) => {
+      console.log('ondone')
+    },
+    oncomplete: (res) => {
+      console.log('oncomplete')
+    }
+  })
+
+  let uploaderBtn = document.getElementById('uploaderBtn');
+  let cancelBtn = document.getElementById('cancelBtn');
+
+  uploaderBtn.onclick = function () {
+    ubsupload.chooseFile()
+  }
+
+  cancelBtn.onclick = function () {
+    const nfile = ubsupload.fliesStore[0];
+    console.log('abort')
+    nfile.abort();
+  }
+
+</script>
+
+</html>

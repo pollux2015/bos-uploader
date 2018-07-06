@@ -4,8 +4,6 @@ import {
 } from './config';
 import * as qiniu from 'qiniu-js';
 import async from 'async';
-import ss from 'becsdk';
-console.log(ss)
 
 // 上传文件
 class upload {

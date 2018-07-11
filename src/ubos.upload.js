@@ -91,7 +91,6 @@ class upload {
 
         /**
          * 创建新的file对象
-
          * 添加文件上传状态及验证状态,
          */
         let nfile = this.newFileObj(isValid, file, validMsg);
@@ -104,14 +103,18 @@ class upload {
       }
 
       this.config.auto && this.start();
+
       // 每次选择文件, 清空验证失败文件store
       this.filesValidError = fileNoPassValid;
+      this.filesValidError.length >= 1 && this.config.onvaliderror && this.config.onvaliderror(fileNoPassValid);
+
       this.fileEl.value = '';
     };
   }
 
   addFile(nfile) {
     nfile.findex = this.fliesStore.length; // 当前文件索引
+    nfile.config = this.config;
     this.setLoadStatus(nfile, 0);
     this.fliesStore.push(nfile);
   }
@@ -174,7 +177,7 @@ class upload {
         break;
 
       case 2: // 已取消
-        this.countFilesLoad--;
+        this.countFilesLoad > 0 && this.countFilesLoad--;
         this.setFileDes(nfile);
         this.config.onabort && this.config.onabort({
           store: this.fliesStore,
@@ -185,7 +188,7 @@ class upload {
       case 3: // 上传完成
 
         // 计算完成文件数量设置状态
-        this.countFilesLoad--;
+        this.countFilesLoad > 0 && this.countFilesLoad--;
         this.countFilesLoaded++;
         this.setFileDes(nfile, {
           progress: 1
@@ -194,11 +197,12 @@ class upload {
         // 绑定完成时间
         this.config.ondone && this.config.ondone({
           store: this.fliesStore,
-          file: nfile
+          file: nfile,
+          result: params
         });
 
         // 自动下一个文件的上传
-        this.uploadNext(nfile.findex);
+        this.uploadNext();
         break;
 
       case 4: // 上传失败
@@ -210,7 +214,7 @@ class upload {
         });
 
         // 自动下一个文件的上传
-        this.uploadNext(nfile.findex);
+        this.uploadNext();
         break;
     }
   }
@@ -218,9 +222,11 @@ class upload {
   // 设置nfile文件相关参数
   setFileDes(nfile, params = {}) {
     nfile.size = params.total || nfile.file.size || 0;
+    const kbs = nfile.size / 1024;
+    nfile.size_ = kbs < 1024 ? kbs.toFixed(2) + 'KB' : (nfile.size / 1024 / 1024).toFixed(2) + 'MB';
     nfile.loaded = params.progress == 1 ? nfile.size : (params.loaded || 0);
-    nfile.progress = params.progress || (nfile.fsize / nfile.loaded) || 0;
-    nfile.precent = nfile.progress * 100 || 0;
+    nfile.progress = params.progress || (nfile.loaded / nfile.size) || 0;
+    nfile.percent = parseInt(params.percent || nfile.progress * 100 || 0);
   }
 
   /**
@@ -232,17 +238,22 @@ class upload {
 
   // 开始上传
   start() {
-    for (let i = 0; i < this.config.uploadMax; i++) {
-      this.uploadNext(i)
-    }
+    this.uploadNext();
   }
 
   // 上传下一个文件
-  uploadNext(currentUploadIndex) {
+  uploadNext() {
     // 如果还有文件为上传完且
     // 正在上传文件小于最大同时上传文件数
     if (this.countFiles > this.countFilesLoaded && this.countFilesLoad < this.config.uploadMax) {
-      this.getNextFile(currentUploadIndex);
+      const lastget = this.lastget || 0;
+      for (let i = lastget; i < this.fliesStore.length; i++) {
+        let curFile = this.fliesStore[i] || {};
+        if (curFile.status === 0) {
+          this.lastget = i;
+          this.upCurrentFile(i);
+        }
+      }
     }
 
     if (this.countFiles == this.countFilesLoaded) {
@@ -253,23 +264,22 @@ class upload {
     }
   }
 
-  // 获取下一个需要上传的文件并上传
-  getNextFile(currentUploadIndex = 0) {
-    let nextFile = null;
-    for (let i = currentUploadIndex; i < this.fliesStore.length; i++) {
-      let curFile = this.fliesStore[i];
-      if (curFile.status == 0) {
-        nextFile = curFile;
-        break;
-      }
+  upCurrentFile(currentUploadIndex) {
+    let curFile = this.fliesStore[currentUploadIndex] || {};
+    if (curFile.status == 0) {
+      curFile.status == 1;
+      curFile && curFile.upload && curFile.upload();
     }
-    nextFile && nextFile.upload && nextFile.upload();
   }
 
   // 七牛上传
   bindQiniuUpload(nfile) {
-    const key = this.config.base_dir + this.config.prefix + nfile.name
+    const key = this.config.base_dir + (nfile.prefix || '') + nfile.name
     let observable = qiniu.upload(nfile.file, key, this.config.token);
+
+    nfile.url = this.config.server + key;
+    nfile.key = key;
+    nfile.prefix_ = this.config.base_dir + (nfile.prefix || '');
 
     // 未开始上传取消则标记状态为已取消
     nfile.abort = () => {
@@ -279,14 +289,16 @@ class upload {
     }
 
     // 给file绑定upload 方法
-    nfile.upload = () => {
+    nfile.upload = (force) => {
+      if (nfile.status != 0 && force) {
+        return
+      }
       let subscription = observable.subscribe({
         next: (res) => {
           this.setLoadStatus(nfile, 1, res.total); // 状态为上传中
         },
         complete: (res) => {
-          nfile.abort = null; // 移除abort方法
-          this.setLoadStatus(nfile, 3); // 状态为已完成
+          this.setLoadStatus(nfile, 3, res); // 状态为已完成
         },
         error: (err) => {
           this.setLoadStatus(nfile, 4, err); // 状态为上传失败
@@ -313,10 +325,15 @@ class upload {
       },
       sessionToken: baiduConfig.sessionToken
     };
+
     const bucket = baiduConfig.bucket;
-    const key = this.config.base_dir + this.config.prefix + nfile.name;
+    const key = this.config.base_dir + (nfile.prefix || '') + nfile.name;
     const baidubceSdk = baidubce.sdk;
-    const BAIDU_PART_SIZE = 4 * 1024 * 1024; // 分块大小
+    const BAIDU_PART_SIZE = 3 * 1024 * 1024; // 分块大小
+
+    nfile.url = this.config.server + key;
+    nfile.key = key;
+    nfile.prefix_ = this.config.base_dir + (nfile.prefix || '');
 
     // new clinet
     let client = new baidubceSdk.BosClient(baiduClientConfig);
@@ -331,12 +348,32 @@ class upload {
       'Content-Type': mimeType
     }
 
+    this.baiduMultipartUpload(nfile, client, bucket, key, options, BAIDU_PART_SIZE)
+  }
+
+  // 分片上传
+  baiduMultipartUpload(nfile, client, bucket, key, options, partSize) {
+    let uploadId;
+
+    let timer = false
+
     // 监听上传进度
     client.on('progress', (res) => {
-      this.setLoadStatus(nfile, 1, {
-        total: res.total,
-        loaded: res.loaded
-      }); // 状态为上传中
+      if (timer) return;
+      timer = true;
+      client.listParts(bucket, key, uploadId).then((response) => {
+        let loaded = 0;
+        // 遍历所有上传事件
+        for (var i = 0; i < response.body.parts.length; i++) {
+          let partdone = response.body.parts[i];
+          loaded += partdone.size;
+        }
+        timer = false;
+        this.setLoadStatus(nfile, 1, {
+          total: nfile.size,
+          loaded: loaded
+        }); // 状态为上传中
+      });
     })
 
     // 未开始上传则标记为已取消
@@ -344,41 +381,22 @@ class upload {
       if (nfile.status == 0) {
         nfile.status = 2;
       } else { // 已开始则调用abort
-        client.abortMultipartUpload();
+        client.abortMultipartUpload(bucket, key, uploadId);
+        this.setLoadStatus(nfile, 2); // 状态为已取消
       }
     }
 
-    if (nfile.size > BAIDU_PART_SIZE) { // 分片上传
-      this.baiduMultipartUpload(nfile, client, bucket, key, options, BAIDU_PART_SIZE)
-    } else {
-      this.baiduNormalUpload(nfile, client, bucket, key, options);
-    }
-  }
-
-  // 正常上传
-  baiduNormalUpload(nfile, client, bucket, key, options) {
-    // 给file绑定upload 方法
-    nfile.upload = () => {
-      client.putObjectFromBlob(bucket, key, nfile.file, options)
-        .then(res => {
-          this.setLoadStatus(nfile, 3); // 状态为已完成
-        })
-        .catch(error => {
-          this.setLoadStatus(nfile, 4, error); // 状态为上传失败
-        });
-    }
-  }
-
-  // 分片上传
-  baiduMultipartUpload(nfile, client, bucket, key, options, partSize) {
-    let uploadId;
-    nfile.upload = () => {
+    nfile.upload = (force) => {
+      if (nfile.status != 0 && force) {
+        return
+      }
       client.initiateMultipartUpload(bucket, key, options)
         .then((response) => {
           uploadId = response.body.uploadId; // 开始上传，获取服务器生成的uploadId
 
           let deferred = baidubce.sdk.Q.defer();
           let tasks = this.baiduGetTasks(nfile.file, uploadId, bucket, key, partSize);
+          nfile.tasks = tasks;
           let state = {
             lengthComputable: true,
             loaded: 0,
@@ -408,7 +426,7 @@ class upload {
           return client.completeMultipartUpload(bucket, key, uploadId, partList); // 完成上传
         })
         .then(res => {
-          this.setLoadStatus(nfile, 3); // 状态为已完成
+          this.setLoadStatus(nfile, 3, res); // 状态为已完成
         })
         .catch(error => {
           this.setLoadStatus(nfile, 4, error); // 状态为上传失败

@@ -5,11 +5,11 @@ const UglifyJsPlugin = require('uglifyjs-webpack-plugin')
 module.exports = {
   mode: 'production',
   entry: {
-    main: './src/ubos.upload.js'
+    'ubos.upload': './src/ubos.upload.js'
   },
   output: {
     filename: '[name].min.js',
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, '../../work/ucview2.0/assets/index/js/vendors'),
     libraryTarget: 'umd',
     library: "ubos"
   },
@@ -27,7 +27,7 @@ module.exports = {
     }]
   },
   plugins: [
-    new UglifyJsPlugin(),
+    // new UglifyJsPlugin(),
     new HtmlWebpackPlugin({
       filename: 'index.html',
       template: 'index.html',

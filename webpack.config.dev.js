@@ -6,13 +6,13 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
   mode: 'development',
   entry: {
-    bceBundle: './src/main.js'
+    main: './src/ubos.upload.js'
   },
   output: {
-    filename: 'ubos.upload.min.js',
-    path: path.resolve(__dirname, 'dev'),
+    filename: '[name].min.js',
+    path: path.resolve(__dirname, 'dist'),
     libraryTarget: 'umd',
-    library: 'ubos'
+    library: "ubos"
   },
   devtool: 'inline-source-map',
   module: {
@@ -28,7 +28,6 @@ module.exports = {
     }]
   },
   plugins: [
-    new UglifyJsPlugin(),
     new webpack.HotModuleReplacementPlugin(),
     new HtmlWebpackPlugin({
       filename: 'index.html',

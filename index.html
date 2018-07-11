@@ -15,17 +15,16 @@
 
 <script>
   var ubsupload = new ubos.upload({
-    prefix: 'documents/',
     uploadMax: 2,
     multiple: true,
-    platform: 2,
+    platform: 1,
     mimeLimit: '',
-    onerror: (res) => {
-      console.log(res)
-    },
-    onabort: (res) => {
-      // console.log(res)
-    },
+    // onerror: (res) => {
+    //   console.log(res)
+    // },
+    // onabort: (res) => {
+    //   // console.log(res)
+    // },
     onprogerss: (res) => {
       console.log(res)
     },

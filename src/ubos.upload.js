@@ -13,6 +13,7 @@ class upload {
     this.countFiles = 0; // 验证通过的文件
     this.countFilesLoad = 0; // 正在上传的文件大小
     this.countFilesLoaded = 0; // 已完成上传
+    this.countFilesError = 0; //取消与上传失败的文件
 
     // extends config
     this.config = this.extends(config, params);
@@ -149,6 +150,7 @@ class upload {
       '4': '上传失败'
     }
 
+    const oldStatus = nfile.status || 0;
     nfile.status = state;
     nfile.statusMsg = statusConfig[state];
 
@@ -177,18 +179,24 @@ class upload {
         break;
 
       case 2: // 已取消
-        this.countFilesLoad > 0 && this.countFilesLoad--;
+
+        if (!nfile.hascountError) {
+          this.countFilesError++;
+          nfile.hascountError = true;
+        }
+
+        this.setFilesLoad(oldStatus);
         this.setFileDes(nfile);
         this.config.onabort && this.config.onabort({
           store: this.fliesStore,
           file: nfile
         });
+
+        this.uploadNext();
         break;
 
       case 3: // 上传完成
-
-        // 计算完成文件数量设置状态
-        this.countFilesLoad > 0 && this.countFilesLoad--;
+        this.setFilesLoad(oldStatus);
         this.countFilesLoaded++;
         this.setFileDes(nfile, {
           progress: 1
@@ -201,21 +209,32 @@ class upload {
           result: params
         });
 
-        // 自动下一个文件的上传
         this.uploadNext();
         break;
 
       case 4: // 上传失败
-        this.countFilesLoad--;
+
+        if (!nfile.hascountError) {
+          this.countFilesError++;
+          nfile.hascountError = true;
+        }
+
+        this.setFilesLoad(oldStatus);
         this.config.onerror && this.config.onerror({
           store: this.fliesStore,
           file: nfile,
           error: params
         });
 
-        // 自动下一个文件的上传
         this.uploadNext();
         break;
+    }
+  }
+
+  // 重新计算正在上传文件数量
+  setFilesLoad(status) {
+    if (this.countFilesLoad && status == 1) {
+      this.countFilesLoad--;
     }
   }
 
@@ -245,18 +264,18 @@ class upload {
   uploadNext() {
     // 如果还有文件为上传完且
     // 正在上传文件小于最大同时上传文件数
-    if (this.countFiles > this.countFilesLoaded && this.countFilesLoad < this.config.uploadMax) {
-      const lastget = this.lastget || 0;
-      for (let i = lastget; i < this.fliesStore.length; i++) {
-        let curFile = this.fliesStore[i] || {};
-        if (curFile.status === 0) {
-          this.lastget = i;
-          this.upCurrentFile(i);
-        }
+    let curAvalidfiles = 0;
+    for (let i = 0; i < this.fliesStore.length; i++) {
+      let curFile = this.fliesStore[i] || {};
+      // console.log('countFilesLoad', this.countFilesLoad, this.config.uploadMax, this.countFilesLoad < this.config.uploadMax)
+      if (!curFile.status && this.countFiles > this.countFilesLoaded && this.countFilesLoad < this.config.uploadMax) {
+        this.setLoadStatus(curFile, 1);
+        this.upCurrentFile(i, true);
       }
     }
 
-    if (this.countFiles == this.countFilesLoaded) {
+    const useFildCount = this.countFiles - this.countFilesError;
+    if (this.countFilesLoaded == useFildCount) {
       this.config.oncomplete && this.config.oncomplete({
         store: this.fliesStore,
         finished: true
@@ -264,11 +283,10 @@ class upload {
     }
   }
 
-  upCurrentFile(currentUploadIndex) {
+  upCurrentFile(currentUploadIndex, force) {
     let curFile = this.fliesStore[currentUploadIndex] || {};
-    if (curFile.status == 0) {
-      curFile.status == 1;
-      curFile && curFile.upload && curFile.upload();
+    if (!curFile.status || force) {
+      curFile && curFile.upload && curFile.upload(force);
     }
   }
 
@@ -283,16 +301,15 @@ class upload {
 
     // 未开始上传取消则标记状态为已取消
     nfile.abort = () => {
-      if (nfile.status == 0) {
-        nfile.status = 2;
-      }
+      this.setLoadStatus(nfile, 2); // 状态为已取消
     }
 
     // 给file绑定upload 方法
     nfile.upload = (force) => {
-      if (nfile.status != 0 && force) {
+      if (nfile.status && !force) {
         return
       }
+
       let subscription = observable.subscribe({
         next: (res) => {
           this.setLoadStatus(nfile, 1, res.total); // 状态为上传中
@@ -306,8 +323,8 @@ class upload {
       });
 
       nfile.abort = () => {
-        this.setLoadStatus(nfile, 2); // 状态为已取消
         subscription.unsubscribe();
+        this.setLoadStatus(nfile, 2); // 状态为已取消
       }
     }
   }
@@ -378,18 +395,17 @@ class upload {
 
     // 未开始上传则标记为已取消
     nfile.abort = () => {
-      if (nfile.status == 0) {
-        nfile.status = 2;
-      } else { // 已开始则调用abort
+      if (nfile.status) {
         client.abortMultipartUpload(bucket, key, uploadId);
-        this.setLoadStatus(nfile, 2); // 状态为已取消
       }
+      this.setLoadStatus(nfile, 2); // 状态为已取消
     }
 
     nfile.upload = (force) => {
-      if (nfile.status != 0 && force) {
+      if (nfile.status && !force) {
         return
       }
+
       client.initiateMultipartUpload(bucket, key, options)
         .then((response) => {
           uploadId = response.body.uploadId; // 开始上传，获取服务器生成的uploadId

@@ -255,6 +255,44 @@ class upload {
     this.config.platform == 1 ? this.bindBaiduUpload(nfile) : this.bindQiniuUpload(nfile);
   }
 
+  // 创建文件夹
+  createPrefix(curprefix, callback) {
+    const toprefix = this.config.base_dir + curprefix;
+    // console.log(toprefix)
+    if (this.config.platform == 1) {
+      const baiduConfig = this.config.baiduConfig;
+
+      // 百度BOS 相关配置
+      let baiduClientConfig = {
+        endpoint: baiduConfig.endpoint, //传入Bucket所在区域域名
+        credentials: {
+          ak: baiduConfig.ak, //您的AccessKey
+          sk: baiduConfig.sk //您的SecretAccessKey
+        },
+        sessionToken: baiduConfig.sessionToken
+      };
+
+      const baidubceSdk = baidubce.sdk;
+      const bucket = baiduConfig.bucket;
+      let client = new baidubceSdk.BosClient(baiduClientConfig);
+      client.putObjectFromString(bucket, toprefix, '', {
+        'Content-MD5': '1B2M2Y8AsgTpgAmY7PhCfg=='
+      }).then(function () {
+        callback && callback()
+      })
+    } else {
+      const emptyBlob = new Blob(['empty'], {
+        type: 'text/plain'
+      });
+      qiniu.upload(emptyBlob, toprefix, this.config.token).subscribe({
+        complete(res) {
+          callback && callback()
+        }
+      })
+    }
+
+  }
+
   // 开始上传
   start() {
     this.uploadNext();
